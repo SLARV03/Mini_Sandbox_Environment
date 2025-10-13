@@ -74,3 +74,7 @@ Build Tools: `GCC` and `Make`
 🔍How low-level Linux features enable container technologies like Docker.
 
 💻The practical application of core OS concepts in a real-world context.
+
+# 📄 *License*
+
+This project is licensed under the MIT License.
