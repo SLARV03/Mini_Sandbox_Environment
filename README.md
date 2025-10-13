@@ -54,10 +54,11 @@ Build Tools: `GCC` and `Make`
 **Installation & Usage**
 * Clone the repository:
   
- `git clone https://github.com/SLARV03/Mini_Sandbox_Environment.git`
 
-`cd linux-sandbox`
-
+```bash
+  git clone https://github.com/SLARV03/Mini_Sandbox_Environment.git
+  cd linux-sandbox
+```
 
 * Compile the project: `make`
 
