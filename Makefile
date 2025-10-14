@@ -2,18 +2,25 @@ CC = gcc
 CFLAGS = -O2 -Wall -Wextra -static
 LDFLAGS = -lseccomp
 
-SRC = src/main.c src/isolation.c src/resources.c src/seccomp.c src/utils.c
-OBJ = $(SRC:.c=.o)
-OUT = build/sandbox_cli
+SRC_DIR=src
+BUILD_DIR=build
+
+SRC = $(SRC_DIR)/main.c $(SRC_DIR)/isolation.c $(SRC_DIR)/resources.c $(SRC_DIR)/seccomp.c $(SRC_DIR)/utils.c
+OBJ = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRC))
+OUT = $(BUILD_DIR)/sandbox_cli
 
 all: $(OUT)
 
 $(OUT): $(OBJ)
-	@mkdir -p build
+	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
-	rm -rf build src/*.o
+	rm -rf $(BUILD_DIR)
 
 phase1:
 	$(MAKE) all
