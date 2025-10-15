@@ -26,7 +26,20 @@ phase1:
 	$(MAKE) all
 
 phase2:
-	@echo "Phase 2: add cgroups/seccomp (coming soon)"
+	@echo "Phase 2: add cgroups/seccomp"
 
 phase3:
 	@echo "Phase 3: automation and monitoring"
+
+
+#Reset: clean everything and rebuild environment
+reset:
+	@echo "[+] Resetting project environment..."
+	@bash cleanup.sh
+	@bash setup.sh
+
+#test:
+#	@bash tests/run_tests.sh
+
+#not actual files
+.PHONY: all clean phase1 phase2 phase3 reset
