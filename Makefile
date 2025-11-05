@@ -32,11 +32,9 @@ phase3:
 	@echo "Phase 3: automation and monitoring"
 
 
-#Reset: clean everything and rebuild environment
+#Reset: Resetting environment
 reset:
-	@echo "[+] Resetting project environment..."
 	@bash cleanup.sh
-	@bash setup.sh
 
 #test:
 #	@bash tests/run_tests.sh
