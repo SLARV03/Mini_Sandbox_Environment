@@ -3,8 +3,21 @@ set -e
 
 ROOT="sandbox_env"
 
-echo "[+] Building minimal root filesystem at $ROOT..."
-sudo rm -rf "$ROOT"
+echo "[+] Preparing sandbox environment at $ROOT..."
+
+#check if sandbox exist 
+if [ -d "$ROOT" ]; then
+  echo "[!] Existing sandbox found at: $ROOT"
+  read -p "Do you want to overwrite it? (y/N): " confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "[✓] Keeping existing sandbox. Skipping rebuild."
+    exit 0
+  fi
+  echo "[*] Removing old sandbox..."
+  sudo rm -rf "$ROOT"
+fi
+
+echo "[+] Building minimal root filesystem..."
 mkdir -p "$ROOT"/{bin,lib,lib64,proc,sys,dev,etc,usr,tmp}
 
 # Copy busybox
@@ -36,11 +49,16 @@ fi
 echo "sandbox" | sudo tee "$ROOT/etc/hostname" > /dev/null
 
 # Create device nodes (ignore errors if not supported)
-sudo mknod -m 666 "$ROOT/dev/null" c 1 3 2>/dev/null || true
-sudo mknod -m 666 "$ROOT/dev/zero" c 1 5 2>/dev/null || true
-sudo mknod -m 666 "$ROOT/dev/tty" c 5 0 2>/dev/null || true
-sudo mknod -m 666 "$ROOT/dev/random" c 1 8 2>/dev/null || true
-sudo mknod -m 666 "$ROOT/dev/urandom" c 1 9 2>/dev/null || true
+for dev in null zero tty random urandom; do
+  case $dev in
+    null) major=1; minor=3 ;;
+    zero) major=1; minor=5 ;;
+    tty) major=5; minor=0 ;;
+    random) major=1; minor=8 ;;
+    urandom) major=1; minor=9 ;;
+  esac
+  sudo mknod -m 666 "$ROOT/dev/$dev" c $major $minor 2>/dev/null || true
+done
 
 # Install symlinks using busybox (if chroot works)
 echo "[+] Installing BusyBox applets..."

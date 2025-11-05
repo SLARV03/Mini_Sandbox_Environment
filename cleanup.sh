@@ -7,18 +7,23 @@ set -o pipefail
 SANDBOX_DIR="sandbox_env"
 BUILD_DIR="build"
 
-echo "[!] This will delete:"
-echo "  -$SANDBOX_DIR/ (sandbox root filesystem)"
-echo "  -$BUILD_DIR/ (compiled binaries)"
-echo ""
-
-#safety meaure
-read -p "Are you sure you want to continue? (y/n): " confirm
-
-if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    echo "[X] Cleanup cancelled."
+if [ ! -d "$SANDBOX_DIR" ] && [ ! -d "$BUILD_DIR" ]; then
+    echo "[✓] No sandbox or build directories found - cleanup not required."
     exit 0
 fi
+
+#echo "[!] This will delete:"
+#echo "  -$SANDBOX_DIR/ (sandbox root filesystem)"
+#echo "  -$BUILD_DIR/ (compiled binaries)"
+#echo ""
+
+#safety meaure
+#read -p "Are you sure you want to continue? (y/n): " confirm
+
+#if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+#    echo "[X] Cleanup cancelled."
+#    exit 0
+#fi
 
 echo "[+] Cleaning up sandbox environment..."
 
@@ -47,4 +52,3 @@ find src -type f -name "*.o" -exec rm -f {} \;
 
 echo ""
 echo "[✓] Cleanup complete."
-echo ""
