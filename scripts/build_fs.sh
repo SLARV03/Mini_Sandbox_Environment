@@ -1,11 +1,16 @@
 #!/bin/bash
 set -e
 
-ROOT="sandbox_env"
+# Allow dynamic ROOT path (default = sandbox_env)
+if [ -n "$1" ]; then
+  ROOT="$1"
+else
+  ROOT="sandbox_env"
+fi
 
 echo "[+] Preparing sandbox environment at $ROOT..."
 
-#check if sandbox exist 
+# Check if sandbox exists
 if [ -d "$ROOT" ]; then
   echo "[!] Existing sandbox found at: $ROOT"
   read -p "Do you want to overwrite it? (y/N): " confirm
@@ -64,4 +69,4 @@ done
 echo "[+] Installing BusyBox applets..."
 sudo chroot "$ROOT" /bin/busybox --install -s /bin || echo "[!] chroot skipped, will use /bin/busybox directly."
 
-echo "[✓] Minimal root filesystem created successfully!"
+echo "[✓] Minimal root filesystem created successfully at $ROOT!"
