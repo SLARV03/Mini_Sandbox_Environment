@@ -9,19 +9,21 @@
 
 
 int main(int argc, char *argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <rootfs> <cmd> [args...]\n", argv[0]);
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <rootfs> <mode> <cmd> [args...]\n", argv[0]);
         return 1;
     }
-    // Phase 3 Part : user login authentication
-    // if (check_auth() != 0) {
-    //     fprintf(stderr, "Unauthorized: set SANDBOX_TOKEN env or create ~/.sandbox_token\n");
-    //     return 1;
-    // }
-    const char *rootfs = argv[1]; 
-    char **cmd = &argv[2];        
+
+    const char *rootfs = argv[1];
+    const char *mode = argv[2];
+    char **cmd = &argv[3];
+
+    // export mode to isolation.c → seccomp.c
+    setenv("SANDBOX_SECCOMP_MODE", mode, 1);
 
     printf("[+] Starting sandbox with root: %s\n", rootfs);
+    printf("[+] Using seccomp mode: %s\n", mode);
+
     return start_sandbox(rootfs, cmd);
 }
 

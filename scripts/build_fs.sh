@@ -5,18 +5,6 @@ ROOT="sandbox_env"
 
 echo "[+] Preparing sandbox environment at $ROOT..."
 
-#check if sandbox exist 
-if [ -d "$ROOT" ]; then
-  echo "[!] Existing sandbox found at: $ROOT"
-  read -p "Do you want to overwrite it? (y/N): " confirm
-  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-    echo "[✓] Keeping existing sandbox. Skipping rebuild."
-    exit 0
-  fi
-  echo "[*] Removing old sandbox..."
-  sudo rm -rf "$ROOT"
-fi
-
 echo "[+] Building minimal root filesystem..."
 mkdir -p "$ROOT"/{bin,lib,lib64,proc,sys,dev,etc,usr,tmp}
 

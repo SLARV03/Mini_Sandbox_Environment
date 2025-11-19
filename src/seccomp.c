@@ -4,102 +4,109 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include "seccomp.h" 
+#include "seccomp.h"
 
-//Alows basic syscalls to the sandboxed process
-static int allow_default_io_rules(scmp_filter_ctx ctx) {
-    int r = 0;
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(close), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(fstat), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(lseek), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(mmap), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(munmap), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(exit_group), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigreturn), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigaction), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(sigaltstack), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(futex), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(clone), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(openat), 0);
-    // #ifdef SCMP_SYS(fstatat) not working
-    // r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(fstatat), 0);
-    // #endif
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(mprotect), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(brk), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(mmap), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(munmap), 0);
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(arch_prctl), 0);
+/*
+ * Portable Seccomp filter that works across distros and kernels.
+ * Resolves syscall names at runtime — so it never fails to compile
+ * even if certain SCMP_SYS() macros are missing.
+ */
 
-    /* allow execve so execvp can run requested program */
-    r |= seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(execve), 0);
-    return r;
+static int allow_syscall(scmp_filter_ctx ctx, const char *name) {
+    int nr = seccomp_syscall_resolve_name(name);
+    if (nr == __NR_SCMP_ERROR || nr < 0)
+        return 0; // syscall not supported, skip
+    return seccomp_rule_add(ctx, SCMP_ACT_ALLOW, nr, 0);
 }
 
-// Apply seccomp filter based on the specified mode ("permissive" or "strict")
+static int deny_syscall(scmp_filter_ctx ctx, const char *name, int err) {
+    int nr = seccomp_syscall_resolve_name(name);
+    if (nr == __NR_SCMP_ERROR || nr < 0)
+        return 0;
+    return seccomp_rule_add(ctx, SCMP_ACT_ERRNO(err), nr, 0);
+}
+
 int apply_seccomp_filter(const char *mode) {
     scmp_filter_ctx ctx;
-    int rc;
 
-    ctx = seccomp_init(SCMP_ACT_LOG);//defaut action
+    if (!mode || strcmp(mode, "open") == 0) {
+        fprintf(stderr, "[seccomp] Mode: open (no syscall restrictions)\n");
+        return 0;
+    }
 
+    ctx = seccomp_init(SCMP_ACT_ERRNO(EPERM)); // default: kill unlisted syscalls
     if (!ctx) {
-        fprintf(stderr, "[seccomp] seccomp_init failed\n");
+        perror("seccomp_init");
         return -1;
     }
 
-    if (allow_default_io_rules(ctx) != 0) {
-        fprintf(stderr, "[seccomp] failed to add base rules\n");
-        seccomp_release(ctx);
-        return -1;
-    }
+    seccomp_attr_set(ctx, SCMP_FLTATR_CTL_LOG, 1); // log denied syscalls
 
-    //allow basic time + pid + thread management + ioctl + readlink
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(ioctl), 0);
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(getpid), 0);
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(gettid), 0);
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(gettimeofday), 0);
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(clock_gettime), 0);
-    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(readlink), 0);
+    const char *common_syscalls[] = {
+        // File + I/O
+        "read", "write", "pread64", "pwrite64", "close",
+        "fstat", "newfstatat", "fstatat", "fstatat64", "statx", "lseek",
+        "open", "openat", "readlink", "access", "ioctl",
 
-    if (mode && strcmp(mode, "permissive") == 0) {
-        /* permissive: explicitly allow networking syscalls */
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(socket), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(connect), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(sendto), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(recvfrom), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(bind), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(listen), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(accept), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(sendmsg), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(recvmsg), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(socketpair), 0);
+        // Memory
+        "mmap", "mprotect", "munmap", "brk",
+
+        // Process
+        "clone", "fork", "vfork", "execve", "execveat",
+        "wait4", "exit", "exit_group", "set_tid_address",
+        "set_robust_list", "getpid", "getppid", "gettid", "futex",
+
+        // Signals
+        "rt_sigaction", "rt_sigprocmask", "sigaltstack", "rt_sigreturn",
+
+        // Time + Info
+        "clock_gettime", "gettimeofday", "nanosleep", "uname", "prlimit64",
+
+        // Identity
+        "getuid", "geteuid", "getgid", "getegid",
+
+        // Misc
+        "arch_prctl", "prctl", "rseq", "getrandom",
+
+        // IO multiplexing
+        "poll", "ppoll", "epoll_create1", "epoll_wait", "epoll_ctl",
+
+        // Device & node
+        "mknod", NULL
+    };
+
+    for (int i = 0; common_syscalls[i]; i++)
+        allow_syscall(ctx, common_syscalls[i]);
+
+    if (strcmp(mode, "restricted") == 0) {
+        fprintf(stderr, "[seccomp] Mode: restricted (network allowed)\n");
+        const char *netcalls[] = {
+            "socket", "connect", "bind", "listen",
+            "accept", "accept4", "sendto", "recvfrom",
+            "sendmsg", "recvmsg", "socketpair", "dup", "dup2", "dup3",NULL
+        };
+        for (int i = 0; netcalls[i]; i++)
+            allow_syscall(ctx, netcalls[i]);
     } else {
-        /* strict: explicitly deny network- and system-modifying syscalls (return EPERM) */
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(socket), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(connect), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(sendto), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(recvfrom), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(bind), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(listen), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(accept), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(sendmsg), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(recvmsg), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(socketpair), 0);
-        /* deny a few dangerous syscalls (will return EPERM) */
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(mount), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(umount2), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(mknod), 0);
-        seccomp_rule_add(ctx, SCMP_ACT_ERRNO(EPERM), SCMP_SYS(ptrace), 0);
+        fprintf(stderr, "[seccomp] Mode: locked (deny network + privileged syscalls)\n");
+        deny_syscall(ctx, "mount", EPERM);
+        deny_syscall(ctx, "umount2", EPERM);
+        deny_syscall(ctx, "ptrace", EPERM);
+        deny_syscall(ctx, "reboot", EPERM);
+        deny_syscall(ctx, "kexec_load", EPERM);
     }
 
-    /* load filter */
-    rc = seccomp_load(ctx);
-    if (rc < 0) {
-        fprintf(stderr, "[seccomp] seccomp_load failed: %s\n", strerror(-rc));
+        /* --- Fallback: alias fstatat64 → newfstatat if missing --- */
+    int fs64 = seccomp_syscall_resolve_name("fstatat64");
+    int newfs = seccomp_syscall_resolve_name("newfstatat");
+    if (fs64 < 0 && newfs >= 0)
+        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, newfs, 0);
+    else if (fs64 >= 0)
+        seccomp_rule_add(ctx, SCMP_ACT_ALLOW, fs64, 0);
+
+
+    if (seccomp_load(ctx) < 0) {
+        perror("seccomp_load");
         seccomp_release(ctx);
         return -1;
     }
