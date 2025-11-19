@@ -2,3 +2,4 @@ build/
 *.o
 
 sandbox_env/
+venv/
